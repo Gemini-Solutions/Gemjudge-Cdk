@@ -4,7 +4,9 @@ from aws_cdk import (
     aws_sqs as sqs,
     aws_iam as iam,
     aws_ec2 as ec2,
-    aws_efs as efs
+    aws_efs as efs,
+    aws_cloudformation as cfn
+
 )
 from constructs import Construct
 
@@ -73,87 +75,92 @@ class GemjudgeCdkStack(Stack):
         submitcodesqs = sqs.Queue(
             self, "submitcodesqs",
             queue_name="submitcodesqs"
-        )
+        )     
+        
+        
+        # # Create Security Group
+        # security_group = ec2.SecurityGroup(
+        #     self, "SecurityGroup",
+        #     vpc=vpc
+        # )
 
-        # # Create a default VPC
+
+
+        # # Create EFS File System
+        # file_system = efs.FileSystem(
+        #     self, "EFS",
+        #     vpc=vpc,
+        #     security_group=security_group,
+        #     performance_mode=efs.PerformanceMode.GENERAL_PURPOSE,
+        #     encrypted=False,
+        # )
+        
+        # # Create a mount target
+        # efs.CfnMountTarget(
+        #     self, "MountTarget",
+        #     file_system_id=file_system.file_system_id,
+        #     subnet_id=vpc.private_subnets[0].subnet_id,
+        #     security_groups=[security_group.security_group_id]
+        # )
+        
+        # # Set POSIX User ID and Root Directory Permissions
+        # efs.CfnFileSystem(
+        #     self, "FileSystemProperties",
+        #     file_system_id=file_system.file_system_id,
+        #     posix_user=efs.PosixUser(
+        #         uid="1000",
+        #         gid="1000"
+        #     ),
+        #     creation_info=efs.CreationInfo(
+        #         owner_uid="1000",
+        #         owner_gid="1000",
+        #         permissions="755"
+        #     )
+        # )
+        
+        # # Specifying Path
+        # path = "/efs"
+
+
         # vpc = ec2.Vpc(
-        #     self, "DefaultVPC",
+        #     self, "DefaultVpc",
         #     max_azs=2,
         #     subnet_configuration=[
         #         ec2.SubnetConfiguration(
-        #             name="public",
-        #             subnet_type=ec2.SubnetType.PUBLIC
+        #             subnet_type=ec2.SubnetType.PUBLIC,
+        #             name="Public",
+        #             cidr_mask=24
+        #         ),
+        #         ec2.SubnetConfiguration(
+        #             subnet_type=ec2.SubnetType.PRIVATE_ISOLATED,
+        #             name="Private",
+        #             cidr_mask=24
         #         )
         #     ]
         # )
 
 
-        # # Create a default security group
-        # default_security_group = ec2.SecurityGroup(
-        #     self, "DefaultSecurityGroup",
-        #     vpc=ec2.Vpc.from_lookup(self, "VPC", is_default=True),
-        #     allow_all_outbound=True
-        # )
+        self.vpc = ec2.Vpc(
+         self, "VPC", 
+         cidr="10.0.0.0/16",
+         max_azs=2, 
+         subnet_configuration=[
+             ec2.SubnetConfiguration( name="Public", subnet_type=ec2.SubnetType.PUBLIC, cidr_mask=24 ),
+             ec2.SubnetConfiguration( name="Private", subnet_type=ec2.SubnetType.PRIVATE_ISOLATED, cidr_mask=24 ) ] )
 
-
-
-        # eip = ec2.CfnEIP(self, "MyEIP")
-
-        # # eip = ec2.CfnEIP(self, "MyEIP") 
-        # eip = ec2.CfnEIP(self, "MyEIP", allocation_id="eipalloc-049df61146f12f897")
-        # # Create a NAT Gateway 
-        # nat_gateway = ec2.CfnNatGateway(self, "MyNatGateway", 
-        # allocation_id=eip.ref, 
-        # subnet_id=vpc.public_subnets[0].subnet_id
-        # )
-
-
-        # Create VPC
-        vpc = ec2.Vpc(
-            self, "VPC",
-            max_azs=2
+        self.eip = ec2.CfnEIP(
+             self, "Eip",
+             domain="vpc"
         )
+
+
+
         
-        # Create Security Group
-        security_group = ec2.SecurityGroup(
-            self, "SecurityGroup",
-            vpc=vpc
+        self.nat_gateway = ec2.CfnNatGateway( self, "NatGateway",
+         allocation_id=self.eip.ref,
+          subnet_id=self.vpc.public_subnets[0].subnet_id
         )
 
 
-
-        # Create EFS File System
-        file_system = efs.FileSystem(
-            self, "EFS",
-            vpc=vpc,
-            security_group=security_group,
-            performance_mode=efs.PerformanceMode.GENERAL_PURPOSE,
-            encrypted=False,
-        )
-        
-        # Create a mount target
-        efs.CfnMountTarget(
-            self, "MountTarget",
-            file_system_id=file_system.file_system_id,
-            subnet_id=vpc.private_subnets[0].subnet_id,
-            security_groups=[security_group.security_group_id]
-        )
-        
-        # Set POSIX User ID and Root Directory Permissions
-        efs.CfnFileSystem(
-            self, "FileSystemProperties",
-            file_system_id=file_system.file_system_id,
-            posix_user=efs.PosixUser(
-                uid="1000",
-                gid="1000"
-            ),
-            creation_info=efs.CreationInfo(
-                owner_uid="1000",
-                owner_gid="1000",
-                permissions="755"
-            )
-        )
-        
-        # Specifying Path
-        path = "/efs"
+        self.nat_gateway.add_depends_on(self.eip)
 
